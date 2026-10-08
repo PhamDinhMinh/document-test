@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>*,*::before,*::after{box-sizing:border-box}body{margin:0}img{max-width:100%}</style>
+<title>Kiến trúc Smart Police</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: một cột chữ ~760px, hình vẽ được rộng tới 1180px và tự cuộn ngang khi màn hẹp */
+  :root {
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --group: #e9eef5;
+    --fg: #132036;
+    --fg-2: #33445d;
+    --muted: #5d6d85;
+    --line: #cdd6e2;
+    --line-strong: #8797ad;
+    --edge: #4d5f79;
+    --accent: #1e5fa8;
+    --sos: #c8102e;
+    --sos-soft: #fbe7ea;
+    --font-body: "Be Vietnam Pro", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b131e; --surface: #122031; --group: #0f1a28; --fg: #e5ecf5; --fg-2: #c1cddc;
+      --muted: #8d9fb6; --line: #243649; --line-strong: #4b6382; --edge: #93a7c1;
+      --accent: #74aaeb; --sos: #ff5c70; --sos-soft: #3a1820; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b131e; --surface: #122031; --group: #0f1a28; --fg: #e5ecf5; --fg-2: #c1cddc;
+    --muted: #8d9fb6; --line: #243649; --line-strong: #4b6382; --edge: #93a7c1;
+    --accent: #74aaeb; --sos: #ff5c70; --sos-soft: #3a1820; color-scheme: dark;
+  }
+
+  body { background: var(--bg); color: var(--fg); font: 15px/1.65 var(--font-body); }
+  .page { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
+  .prose { max-width: 760px; }
+  h1, h2, h3 { text-wrap: balance; line-height: 1.25; margin: 0; }
+  h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 22px; font-weight: 700; }
+  h3 { font-size: 16px; font-weight: 600; }
+  p { margin: 0; }
+  code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+  code { background: var(--group); padding: 1px 5px; border-radius: 4px; color: var(--fg-2); }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  header.top { display: grid; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+  .eyebrow { font: 500 12px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .lede { font-size: 17px; color: var(--fg-2); }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; }
+  nav.toc a { text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { display: grid; gap: 16px; padding-top: 44px; }
+  .sec-num { font: 500 13px var(--font-mono); color: var(--sos); }
+  .sec-head { display: grid; gap: 4px; }
+
+  figure { margin: 0; display: grid; gap: 10px; }
+  .canvas { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; padding: 14px; }
+  .canvas svg { display: block; width: 100%; height: auto; }
+  figcaption { font-size: 13.5px; color: var(--muted); max-width: 760px; }
+  .legend { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; white-space: nowrap; }
+  .legend i { display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--edge); }
+  .legend i.hot { border-color: var(--sos); }
+  .legend i.dash { border-top-style: dashed; }
+
+  /* SVG */
+  svg text { font-family: var(--font-body); }
+  .d-group { fill: var(--group); stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 4 3; }
+  .d-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+  .d-box.hot { stroke: var(--sos); fill: var(--sos-soft); }
+  .d-title { font-size: 13.5px; font-weight: 600; fill: var(--fg); }
+  .d-sub { font-size: 11.5px; fill: var(--muted); }
+  .d-colhead { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; fill: var(--muted); }
+  .d-edge { stroke: var(--edge); stroke-width: 1.4; fill: none; }
+  .d-edge.hot { stroke: var(--sos); stroke-width: 1.8; }
+  .d-edge.dash { stroke-dasharray: 5 4; }
+  .d-dot { fill: var(--edge); }
+  .d-lbl { font-size: 11.5px; fill: var(--fg-2); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+  .d-lbl.hot { fill: var(--sos); font-weight: 600; }
+  .m-std { fill: var(--edge); }
+  .m-hot { fill: var(--sos); }
+  .d-life { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 4; }
+  .d-num { fill: var(--fg); }
+  .d-num-t { font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; fill: var(--surface); }
+  .d-note { fill: var(--group); stroke: var(--line-strong); stroke-width: 1; }
+  .d-note-t { font-size: 11.5px; fill: var(--fg-2); font-style: italic; }
+
+  details.src { font-size: 13.5px; }
+  details.src summary { cursor: pointer; color: var(--accent); width: fit-content; }
+  details.src .src-body { display: grid; gap: 8px; margin-top: 10px; }
+  details.src pre { margin: 0; padding: 12px 14px; background: var(--group); border-radius: 8px; overflow-x: auto; font: 12.5px/1.55 var(--font-mono); color: var(--fg-2); }
+  button.copy { justify-self: start; font: 500 13px var(--font-body); color: var(--fg); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+  button.copy:hover { border-color: var(--accent); }
+
+  .tbl-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font: 500 11.5px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 8px; }
+
+  ul.points { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+  ul.points li::marker { color: var(--muted); }
+  .callout { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 16px 18px; display: grid; gap: 10px; }
+
+  @media (max-width: 600px) {
+    h1 { font-size: 27px; }
+    .page { padding-block: 28px 56px; padding-inline: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <div class="eyebrow">Tài liệu thuyết minh giải pháp · Bản sao số đô thị Hà Nội (UDT)</div>
+    <h1>Kiến trúc Smart Police</h1>
+    <p class="lede prose">Phân hệ tiếp nhận SOS và điều động lực lượng tuần tra trên nền bản đồ 3D của UDT, kết nối với hệ thống SOS của Công an Thành phố Hà Nội. Sơ đồ dựng theo mã nguồn <code>udt-web</code> và tài liệu tích hợp hiện hành.</p>
+    <nav class="toc" aria-label="Mục lục">
+      <a href="#kien-truc">1. Kiến trúc tổng thể</a>
+      <a href="#luong-sos">2. Luồng tiếp nhận SOS</a>
+      <a href="#luong-dieu-dong">3. Luồng điều động</a>
+      <a href="#xac-thuc">4. Xác thực khung nhúng</a>
+      <a href="#tin-cay">5. Cơ chế tin cậy</a>
+      <a href="#pham-vi">6. Phạm vi &amp; ghi chú</a>
+    </nav>
+  </header>
+
+  <!-- 1. KIẾN TRÚC -->
+  <section id="kien-truc">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <h2>Kiến trúc tổng thể</h2>
+    </div>
+    <p class="prose">Hệ thống SOS của Công an Thành phố là nguồn dữ liệu gốc về vụ việc, tổ tuần tra và lệnh điều động. UDT không sao chép dữ liệu này mà đọc trực tiếp qua ba kênh (REST, WebSocket, video) rồi hiển thị trên bản đồ 3D, ở hai nơi: Web Bản sao số UDT và khung nhúng đặt ngay trong web điều hành của Công an.</p>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 1160 560" role="img" aria-label="Kiến trúc tổng thể: người dân và tổ tuần tra gửi dữ liệu vào hệ thống SOS của Công an TP; UDT đọc qua REST, WebSocket và video rồi hiển thị trên khung nhúng trong web Công an và trên Web Bản sao số UDT." style="min-width: 900px">
+          <defs>
+            <marker id="a-std" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="m-std" d="M0,0 L10,5 L0,10 z"/></marker>
+            <marker id="a-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="m-hot" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+
+          <!-- Column heads -->
+          <text class="d-colhead" x="20" y="30">HIỆN TRƯỜNG</text>
+          <text class="d-colhead" x="300" y="30">HỆ THỐNG CÔNG AN TP</text>
+          <text class="d-colhead" x="600" y="30">TẦNG TÍCH HỢP UDT</text>
+          <text class="d-colhead" x="900" y="30">KÊNH ĐIỀU HÀNH</text>
+
+          <!-- Col 1 -->
+          <rect class="d-box hot" x="20" y="70" width="180" height="80" rx="8"/>
+          <text class="d-title" x="36" y="98">Người dân</text>
+          <text class="d-sub" x="36" y="118">App iHanoi · nút SOS</text>
+          <text class="d-sub" x="36" y="136">toạ độ, video trực tiếp</text>
+
+          <rect class="d-box" x="20" y="205" width="180" height="80" rx="8"/>
+          <text class="d-title" x="36" y="233">Tổ tuần tra</text>
+          <text class="d-sub" x="36" y="253">App di động công an</text>
+          <text class="d-sub" x="36" y="271">GPS, hướng, pin, lệnh</text>
+
+          <!-- Col 2 -->
+          <rect class="d-group" x="300" y="46" width="220" height="296" rx="10"/>
+          <text class="d-title" x="314" y="68" style="font-size:12.5px">Hệ thống SOS &amp; điều động</text>
+          <rect class="d-box" x="314" y="80" width="192" height="46" rx="6"/>
+          <text class="d-title" x="326" y="99" style="font-size:12.5px">API quản trị (REST)</text>
+          <text class="d-sub" x="326" y="116">vụ SOS · tổ tuần tra · thống kê</text>
+          <rect class="d-box" x="314" y="142" width="192" height="46" rx="6"/>
+          <text class="d-title" x="326" y="161" style="font-size:12.5px">Kênh sự kiện (WebSocket)</text>
+          <text class="d-sub" x="326" y="178">sos.* · patrol.* · stream.*</text>
+          <rect class="d-box" x="314" y="207" width="192" height="46" rx="6"/>
+          <text class="d-title" x="326" y="226" style="font-size:12.5px">Máy chủ video</text>
+          <text class="d-sub" x="326" y="243">phát trực tiếp WHEP · bản ghi</text>
+          <rect class="d-box" x="314" y="279" width="192" height="46" rx="6"/>
+          <text class="d-title" x="326" y="298" style="font-size:12.5px">Xác thực</text>
+          <text class="d-sub" x="326" y="315">JWT cán bộ · vé WebSocket 30 s</text>
+
+          <!-- Col 3 -->
+          <rect class="d-box" x="600" y="72" width="220" height="58" rx="8"/>
+          <text class="d-title" x="614" y="96">Next.js server</text>
+          <text class="d-sub" x="614" y="115">proxy REST cùng nguồn</text>
+
+          <rect class="d-box" x="600" y="270" width="220" height="140" rx="8"/>
+          <text class="d-title" x="614" y="294">udt-backend (.NET)</text>
+          <text class="d-sub" x="614" y="316">Đăng nhập · phân quyền</text>
+          <text class="d-sub" x="614" y="335">Xử lý vụ: xác nhận, ghi chú</text>
+          <text class="d-sub" x="614" y="354">Danh mục trụ sở công an</text>
+          <text class="d-sub" x="614" y="373">Proxy /api/embed/*</text>
+          <text class="d-sub" x="614" y="392">(chuyển tiếp token cán bộ)</text>
+
+          <!-- Col 4 -->
+          <rect class="d-group" x="900" y="46" width="240" height="204" rx="10"/>
+          <text class="d-title" x="914" y="68" style="font-size:12.5px">Web điều hành Công an TP</text>
+          <text class="d-sub" x="914" y="86">cán bộ trực ban</text>
+          <rect class="d-box" x="914" y="132" width="212" height="104" rx="8"/>
+          <text class="d-title" x="928" y="156">Khung nhúng /embed/sos</text>
+          <text class="d-sub" x="928" y="176">iframe, không cần tài khoản UDT</text>
+          <text class="d-sub" x="928" y="195">bản đồ 3D vụ SOS</text>
+          <text class="d-sub" x="928" y="214">+ điều động tổ tuần tra</text>
+
+          <rect class="d-box" x="900" y="282" width="240" height="128" rx="8"/>
+          <text class="d-title" x="914" y="306">Web Bản sao số UDT</text>
+          <text class="d-sub" x="914" y="326">lãnh đạo · bộ phận vận hành</text>
+          <text class="d-sub" x="914" y="345">bản đồ 3D CesiumJS</text>
+          <text class="d-sub" x="914" y="364">21 lớp dữ liệu đô thị</text>
+          <text class="d-sub" x="914" y="383">(SOS, công an, camera, PCCC…)</text>
+
+          <!-- Edges: field -> system -->
+          <line class="d-edge hot" x1="200" y1="110" x2="298" y2="110" marker-end="url(#a-hot)"/>
+          <text class="d-lbl hot" x="250" y="94" text-anchor="middle">báo SOS</text>
+          <line class="d-edge" x1="202" y1="245" x2="298" y2="245" marker-start="url(#a-std)" marker-end="url(#a-std)"/>
+          <text class="d-lbl" x="250" y="228" text-anchor="middle">GPS, nhận /</text>
+          <text class="d-lbl" x="250" y="264" text-anchor="middle">báo lệnh</text>
+
+          <!-- REST -> Next.js -> bus -->
+          <line class="d-edge" x1="506" y1="101" x2="598" y2="101" marker-end="url(#a-std)"/>
+          <text class="d-lbl" x="552" y="93" text-anchor="middle">REST</text>
+          <line class="d-edge" x1="820" y1="101" x2="862" y2="101"/>
+
+          <!-- WS -> bus (hot) -->
+          <line class="d-edge hot" x1="506" y1="165" x2="862" y2="165"/>
+          <text class="d-lbl hot" x="710" y="157" text-anchor="middle">sự kiện thời gian thực · WebSocket</text>
+
+          <!-- Video -> bus -->
+          <line class="d-edge" x1="506" y1="230" x2="862" y2="230"/>
+          <text class="d-lbl" x="710" y="222" text-anchor="middle">video trực tiếp · bản ghi</text>
+
+          <!-- Bus -->
+          <line class="d-edge" x1="862" y1="101" x2="862" y2="330"/>
+          <circle class="d-dot" cx="862" cy="101" r="3"/>
+          <circle class="d-dot" cx="862" cy="165" r="3.2" style="fill: var(--sos)"/>
+          <circle class="d-dot" cx="862" cy="230" r="3"/>
+          <line class="d-edge" x1="862" y1="184" x2="912" y2="184" marker-end="url(#a-std)"/>
+          <line class="d-edge" x1="862" y1="330" x2="898" y2="330" marker-end="url(#a-std)"/>
+
+          <!-- Auth <-> backend -->
+          <polyline class="d-edge" points="508,302 560,302 560,340 598,340" marker-start="url(#a-std)" marker-end="url(#a-std)"/>
+          <text class="d-lbl" x="566" y="296" text-anchor="start">token</text>
+
+          <!-- backend -> UDT web -->
+          <line class="d-edge" x1="820" y1="392" x2="898" y2="392" marker-end="url(#a-std)"/>
+          <text class="d-lbl" x="859" y="384" text-anchor="middle">REST</text>
+
+          <!-- Parent -> embed -->
+          <line class="d-edge" x1="1020" y1="94" x2="1020" y2="130" marker-end="url(#a-std)"/>
+          <text class="d-lbl" x="1028" y="108" text-anchor="start">JWT, lệnh</text>
+          <text class="d-lbl" x="1028" y="122" text-anchor="start">điều động</text>
+
+          <!-- Base data band -->
+          <rect class="d-group" x="20" y="452" width="1120" height="92" rx="10"/>
+          <text class="d-colhead" x="36" y="474">DỮ LIỆU NỀN &amp; DỊCH VỤ BỔ TRỢ</text>
+          <rect class="d-box" x="36" y="486" width="200" height="44" rx="6"/>
+          <text class="d-title" x="48" y="505" style="font-size:12.5px">Ranh giới 126 phường/xã</text>
+          <text class="d-sub" x="48" y="521">GeoJSON sau sáp nhập</text>
+          <rect class="d-box" x="252" y="486" width="200" height="44" rx="6"/>
+          <text class="d-title" x="264" y="505" style="font-size:12.5px">417 trụ sở công an</text>
+          <text class="d-sub" x="264" y="521">kèm phường phụ trách</text>
+          <rect class="d-box" x="468" y="486" width="200" height="44" rx="6"/>
+          <text class="d-title" x="480" y="505" style="font-size:12.5px">Danh bạ CSKV</text>
+          <text class="d-sub" x="480" y="521">126 đơn vị phường/xã</text>
+          <rect class="d-box" x="684" y="486" width="200" height="44" rx="6"/>
+          <text class="d-title" x="696" y="505" style="font-size:12.5px">Camera VMS iHanoi</text>
+          <text class="d-sub" x="696" y="521">vị trí, luồng xem</text>
+          <rect class="d-box" x="900" y="486" width="224" height="44" rx="6"/>
+          <text class="d-title" x="912" y="505" style="font-size:12.5px">Map4D</text>
+          <text class="d-sub" x="912" y="521">tìm địa điểm · chỉ đường</text>
+
+          <line class="d-edge" x1="1020" y1="452" x2="1020" y2="412" marker-end="url(#a-std)"/>
+          <text class="d-lbl" x="1028" y="438" text-anchor="start">lớp nền, tra phường</text>
+        </svg>
+      </div>
+      <figcaption>
+        <span class="legend"><i class="hot"></i>luồng sự kiện SOS thời gian thực</span><span class="legend"><i></i>dữ liệu, lệnh, truy vấn</span><br>
+        Cả hai kênh điều hành dùng chung lõi bản đồ 3D và cùng nhận ba kênh dữ liệu từ hệ thống Công an. REST đi qua Next.js server vì gateway của Công an không mở CORS cho tên miền UDT; WebSocket và video đi thẳng từ trình duyệt.
+      </figcaption>
+      <details class="src">
+        <summary>Mã Mermaid để chỉnh sửa (draw.io, mermaid.live)</summary>
+        <div class="src-body">
+          <pre id="mm-arch"></pre>
+          <button class="copy" type="button" data-target="mm-arch">Sao chép mã</button>
+        </div>
+      </details>
+    </figure>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Thành phần</th><th>Vai trò</th><th>Công nghệ</th></tr></thead>
+        <tbody>
+          <tr><td>Web Bản sao số UDT</td><td>Bản đồ 3D toàn thành phố với 21 lớp dữ liệu; theo dõi vụ SOS, xem video, xác nhận tiếp nhận vụ. Ẩn lớp camera theo tài khoản.</td><td>Next.js, React, CesiumJS, Zustand, antd</td></tr>
+          <tr><td>Khung nhúng /embed/sos</td><td>Bản đồ SOS và điều động đặt trong web điều hành của Công an qua iframe. Không đăng nhập UDT; quyền hạn theo token cán bộ trực ban.</td><td>Route nhúng Next.js, postMessage, CSP frame-ancestors</td></tr>
+          <tr><td>Next.js server</td><td>Proxy REST cùng nguồn tới gateway SOS và iHanoi (hai gateway này chặn gọi chéo tên miền); đặt header bảo mật cho trang nhúng.</td><td>Next.js rewrites, chạy standalone</td></tr>
+          <tr><td>udt-backend</td><td>Đăng nhập, phân quyền tài khoản UDT; xử lý vụ (xác nhận, cập nhật, ghi chú); danh mục trụ sở; cổng <code>/api/embed/*</code> chuyển tiếp nguyên token cán bộ sang hệ thống Công an.</td><td>.NET (ABP), REST</td></tr>
+          <tr><td>Hệ thống SOS Công an TP</td><td>Nguồn gốc của vụ SOS, tổ tuần tra, lệnh điều động; phát sự kiện thời gian thực và video trực tiếp từ người báo.</td><td>REST, WebSocket, WHEP</td></tr>
+          <tr><td>Dữ liệu nền</td><td>Ranh giới hành chính, trụ sở công an, danh bạ cảnh sát khu vực, camera, bản đồ và chỉ đường.</td><td>GeoJSON/JSON trên CDN, API Map4D, VMS</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 2. LUỒNG SOS -->
+  <section id="luong-sos">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <h2>Luồng tiếp nhận và xử lý SOS</h2>
+    </div>
+    <p class="prose">Từ lúc người dân bấm SOS đến khi cán bộ trực ban biết vụ thuộc phường nào, công an nào phụ trách và xem được video hiện trường.</p>
+    <figure>
+      <div class="canvas" id="fig-sos"></div>
+      <figcaption>Phường được suy ra từ toạ độ bằng đa giác ranh giới 126 phường/xã, không dựa vào mã phường gửi kèm. Trụ sở hiển thị là đơn vị <em>phụ trách</em> phường đó, không phải trụ sở nằm gần nhất.</figcaption>
+      <details class="src">
+        <summary>Mã Mermaid để chỉnh sửa (draw.io, mermaid.live)</summary>
+        <div class="src-body">
+          <pre id="mm-sos"></pre>
+          <button class="copy" type="button" data-target="mm-sos">Sao chép mã</button>
+        </div>
+      </details>
+    </figure>
+  </section>
+
+  <!-- 3. ĐIỀU ĐỘNG -->
+  <section id="luong-dieu-dong">
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <h2>Luồng điều động tổ tuần tra</h2>
+    </div>
+    <p class="prose">Web điều hành của Công an chọn vụ cần điều động; khung nhúng tìm các tổ đang trực quanh vụ, làm nổi bật số tổ gần nhất theo yêu cầu và cập nhật trạng thái lệnh theo thời gian thực. Việc giao lệnh do hệ thống của Công an thực hiện.</p>
+    <figure>
+      <div class="canvas" id="fig-dispatch"></div>
+      <figcaption>Khi không có vụ nào đang điều động (<code>target = null</code>), khung nhúng vẫn hiển thị toàn bộ tổ đang trong ca trên địa bàn. Bán kính quét được hệ thống Công an tự nới rộng khi quanh vụ không đủ tổ.</figcaption>
+      <details class="src">
+        <summary>Mã Mermaid để chỉnh sửa (draw.io, mermaid.live)</summary>
+        <div class="src-body">
+          <pre id="mm-dispatch"></pre>
+          <button class="copy" type="button" data-target="mm-dispatch">Sao chép mã</button>
+        </div>
+      </details>
+    </figure>
+
+    <h3>Trạng thái tổ tuần tra trên bản đồ</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Trạng thái</th><th>Khi nào</th><th>Mã</th></tr></thead>
+        <tbody>
+          <tr><td><span class="swatch" style="background:#d97706"></span>Chờ nhận lệnh</td><td>Đã được giao lệnh, tổ chưa phản hồi</td><td class="mono">cho</td></tr>
+          <tr><td><span class="swatch" style="background:#1e5fa8"></span>Đã nhận lệnh</td><td>Tổ đã chấp nhận, đang di chuyển</td><td class="mono">nhan</td></tr>
+          <tr><td><span class="swatch" style="background:#6d28d9"></span>Đang xử lý</td><td>Tổ đã tới hiện trường</td><td class="mono">dang-xu-ly</td></tr>
+          <tr><td><span class="swatch" style="background:#0f766e"></span>Đã xong</td><td>Hoàn thành lệnh</td><td class="mono">xong</td></tr>
+          <tr><td><span class="swatch" style="background:#c8102e"></span>Từ chối</td><td>Tổ từ chối lệnh</td><td class="mono">tu-choi</td></tr>
+          <tr><td><span class="swatch" style="background:#6b7280"></span>Bận</td><td>Đang có lệnh khác chưa đóng</td><td class="mono">ban</td></tr>
+          <tr><td><span class="swatch" style="background:#1f7a48"></span>Rảnh</td><td>Trong ca, sẵn sàng nhận lệnh</td><td class="mono">ranh</td></tr>
+          <tr><td><span class="swatch" style="background:#9aa1ab"></span>Hết ca</td><td>Chỉ gặp ở lớp tổ thường trực</td><td class="mono">nghi</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose" style="font-size:14px;color:var(--muted)">Màu do Công an chốt. Tổ có toạ độ cũ hơn 5 phút vẫn giữ màu trạng thái, popup ghi chú thêm "(đã cũ)". Tổ ngoài số lượng <code>max_teams</code> được làm mờ, không ẩn.</p>
+  </section>
+
+  <!-- 4. XÁC THỰC -->
+  <section id="xac-thuc">
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <h2>Xác thực và phân quyền khung nhúng</h2>
+    </div>
+    <p class="prose">Khung nhúng không có tài khoản riêng. Token của cán bộ trực ban được chuyển nguyên sang hệ thống Công an, nên phạm vi dữ liệu (một phường/xã hay toàn thành phố) do chính token đó quyết định. Token chỉ nằm trong bộ nhớ trang, không ghi vào localStorage hay query string.</p>
+    <figure>
+      <div class="canvas" id="fig-auth"></div>
+      <figcaption>Trang nhúng gửi kèm <code>Referrer-Policy: no-referrer</code> và chỉ cho phép nhúng từ các tên miền khai báo trong <code>frame-ancestors</code>. Token nằm ở phần <code>#hash</code> nên không bao giờ được gửi lên máy chủ.</figcaption>
+      <details class="src">
+        <summary>Mã Mermaid để chỉnh sửa (draw.io, mermaid.live)</summary>
+        <div class="src-body">
+          <pre id="mm-auth"></pre>
+          <button class="copy" type="button" data-target="mm-auth">Sao chép mã</button>
+        </div>
+      </details>
+    </figure>
+  </section>
+
+  <!-- 5. TIN CẬY -->
+  <section id="tin-cay">
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <h2>Cơ chế đảm bảo tin cậy</h2>
+    </div>
+    <ul class="points prose">
+      <li><strong>Kênh kép REST + WebSocket.</strong> REST kéo định kỳ 15 giây (web Công an chỉnh được qua <code>refresh_ms</code>) chạy song song WebSocket. Mất WebSocket thì bản đồ giữ nguyên dữ liệu, REST vẫn chạy; khi nối lại thì kéo bù ngay một lượt.</li>
+      <li><strong>Tự nối lại.</strong> Thử lại sau 0, 2, 5, 10, 30 giây; mỗi lần nối xin vé WebSocket mới. Gặp 401 thì xin token mới từ web Công an thay vì tải lại trang.</li>
+      <li><strong>Chống ghi đè dữ liệu cũ.</strong> Chỉ nhận toạ độ tổ có thời điểm ghi mới hơn toạ độ đang hiển thị; gói tin đến muộn bị bỏ qua.</li>
+      <li><strong>Không đoán vị trí.</strong> Vụ hoặc tổ chưa có toạ độ thì không vẽ (không vẽ về điểm 0,0). Vụ chưa có toạ độ (mã lỗi <code>sos-no-location</code>) thì không vẽ vòng quét.</li>
+      <li><strong>Tiết kiệm tài nguyên.</strong> Tạm dừng kéo REST khi tab bị ẩn, kéo lại ngay khi mở tab. Danh sách vụ tải theo trang 50 bản ghi, tối đa 10 trang, chạm trần thì ghi cảnh báo.</li>
+      <li><strong>Phân quyền rõ ràng.</strong> Lỗi 403 dừng hẳn và báo chưa phân quyền đơn vị, không tự xin lại token.</li>
+    </ul>
+  </section>
+
+  <!-- 6. PHẠM VI -->
+  <section id="pham-vi">
+    <div class="sec-head">
+      <span class="sec-num">06</span>
+      <h2>Phạm vi và ghi chú</h2>
+    </div>
+    <div class="callout prose">
+      <p><strong>Thuộc UDT:</strong> Web Bản sao số, khung nhúng <code>/embed/sos</code>, tra phường và trụ sở phụ trách từ toạ độ, hiển thị video, hiển thị điều động và trạng thái tổ, cổng chuyển tiếp <code>/api/embed/*</code>.</p>
+      <p><strong>Thuộc hệ thống Công an TP:</strong> app iHanoi phía người dân, app tổ tuần tra, tiếp nhận vụ, giao lệnh điều động, máy chủ video, cấp token cán bộ.</p>
+      <p><strong>Dữ liệu Công an còn cần cung cấp:</strong> số điện thoại trực ban của từng trụ sở (hiện đang trống ở cả 126 trụ sở cấp phường) và danh bạ cán bộ công an theo phường. Cấp tổ dân phố chưa xác định được từ toạ độ vì chưa có ranh giới tổ.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var LANE_W = 190, PAD = 24, HEAD_H = 50, TOP = 10;
+
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  function render(cfg) {
+    var lanes = cfg.lanes, steps = cfg.steps;
+    var W = PAD * 2 + lanes.length * LANE_W;
+    var xs = lanes.map(function (_, i) { return PAD + LANE_W * i + LANE_W / 2; });
+    var y = TOP + HEAD_H + 30;
+    var body = [], n = 0;
+
+    steps.forEach(function (s) {
+      var lines = (s.l || "").split("|");
+      if (s.note) {
+        var a = xs[s.note[0]] - 80, b = xs[s.note[1]] + 80;
+        body.push('<rect class="d-note" x="' + a + '" y="' + (y - 6) + '" width="' + (b - a) + '" height="' + (lines.length * 16 + 12) + '" rx="5"/>');
+        lines.forEach(function (ln, i) {
+          body.push('<text class="d-note-t" x="' + ((a + b) / 2) + '" y="' + (y + 12 + i * 16) + '" text-anchor="middle">' + esc(ln) + '</text>');
+        });
+        y += lines.length * 16 + 34;
+        return;
+      }
+      n++;
+      var cls = "d-edge" + (s.hot ? " hot" : "") + (s.dash ? " dash" : "");
+      var mk = s.hot ? "a-hot-" + cfg.id : "a-std-" + cfg.id;
+      var lcls = "d-lbl" + (s.hot ? " hot" : "");
+      if (s.self !== undefined) {
+        var x = xs[s.self];
+        var top = y + (lines.length - 1) * 15;
+        body.push('<polyline class="' + cls + '" points="' + x + ',' + (top - 4) + ' ' + (x + 34) + ',' + (top - 4) + ' ' + (x + 34) + ',' + (top + 14) + ' ' + (x + 4) + ',' + (top + 14) + '" marker-end="url(#' + mk + ')"/>');
+        lines.forEach(function (ln, i) {
+          body.push('<text class="' + lcls + '" x="' + (x + 42) + '" y="' + (y + i * 15 + 4) + '">' + esc(ln) + '</text>');
+        });
+        body.push(num(x - 14, top + 5, n));
+        y += lines.length * 15 + 36;
+        return;
+      }
+      var x1 = xs[s.f], x2 = xs[s.t], dir = x2 > x1 ? 1 : -1;
+      var ly = y + (lines.length - 1) * 15 + 8;
+      body.push('<line class="' + cls + '" x1="' + (x1 + dir * 4) + '" y1="' + ly + '" x2="' + (x2 - dir * 3) + '" y2="' + ly + '" marker-end="url(#' + mk + ')"/>');
+      lines.forEach(function (ln, i) {
+        body.push('<text class="' + lcls + '" x="' + ((x1 + x2) / 2) + '" y="' + (y + i * 15) + '" text-anchor="middle">' + esc(ln) + '</text>');
+      });
+      body.push(num(x1 - dir * 14, ly, n));
+      y += lines.length * 15 + 30;
+    });
+
+    var H = y + 6;
+    var out = [];
+    out.push('<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(cfg.aria) + '" style="min-width:' + Math.round(W * 0.78) + 'px;max-width:' + W + 'px">');
+    out.push('<defs><marker id="a-std-' + cfg.id + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="m-std" d="M0,0 L10,5 L0,10 z"/></marker>');
+    out.push('<marker id="a-hot-' + cfg.id + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="m-hot" d="M0,0 L10,5 L0,10 z"/></marker></defs>');
+    lanes.forEach(function (ln, i) {
+      var x = xs[i];
+      out.push('<line class="d-life" x1="' + x + '" y1="' + (TOP + HEAD_H) + '" x2="' + x + '" y2="' + (H - 4) + '"/>');
+      out.push('<rect class="d-box' + (ln.hot ? " hot" : "") + '" x="' + (x - LANE_W / 2 + 10) + '" y="' + TOP + '" width="' + (LANE_W - 20) + '" height="' + HEAD_H + '" rx="7"/>');
+      out.push('<text class="d-title" x="' + x + '" y="' + (TOP + 21) + '" text-anchor="middle" style="font-size:12.5px">' + esc(ln.name) + '</text>');
+      out.push('<text class="d-sub" x="' + x + '" y="' + (TOP + 38) + '" text-anchor="middle">' + esc(ln.sub) + '</text>');
+    });
+    out.push(body.join(""));
+    out.push("</svg>");
+    document.getElementById(cfg.el).innerHTML = out.join("");
+    document.getElementById(cfg.mm).textContent = toMermaid(cfg);
+  }
+
+  function num(x, y, n) {
+    return '<circle class="d-num" cx="' + x + '" cy="' + y + '" r="8"/><text class="d-num-t" x="' + x + '" y="' + (y + 3.6) + '" text-anchor="middle">' + n + "</text>";
+  }
+
+  function mmText(s) { return s.replace(/\|/g, " ").replace(/;/g, ",").replace(/#/g, "#35;"); }
+
+  function toMermaid(cfg) {
+    var L = ["sequenceDiagram", "  autonumber"];
+    cfg.lanes.forEach(function (ln, i) { L.push("  participant P" + i + " as " + mmText(ln.name + " (" + ln.sub + ")")); });
+    cfg.steps.forEach(function (s) {
+      if (s.note) { L.push("  Note over P" + s.note[0] + ",P" + s.note[1] + ": " + mmText(s.l)); return; }
+      if (s.self !== undefined) { L.push("  P" + s.self + "->>P" + s.self + ": " + mmText(s.l)); return; }
+      L.push("  P" + s.f + (s.dash ? "-->>" : "->>") + "P" + s.t + ": " + mmText(s.l));
+    });
+    return L.join("\n");
+  }
+
+  render({
+    id: "sos", el: "fig-sos", mm: "mm-sos",
+    aria: "Luồng tiếp nhận SOS: người dân bấm SOS, hệ thống Công an phát sự kiện, bản đồ UDT hiện ghim, tra phường và trụ sở phụ trách, mở video, cán bộ xác nhận.",
+    lanes: [
+      { name: "Người dân", sub: "App iHanoi", hot: true },
+      { name: "Hệ thống SOS", sub: "Công an TP" },
+      { name: "Bản đồ UDT", sub: "web / khung nhúng" },
+      { name: "Dữ liệu nền", sub: "phường · trụ sở · CSKV" },
+      { name: "udt-backend", sub: ".NET" },
+      { name: "Cán bộ trực ban", sub: "người dùng" }
+    ],
+    steps: [
+      { f: 0, t: 1, l: "Bấm SOS: toạ độ, thông tin|kèm video trực tiếp nếu có", hot: true },
+      { f: 1, t: 2, l: "sos.created (WebSocket)", hot: true },
+      { self: 2, l: "Ghim đỏ + cảnh báo|trên bản đồ 3D" },
+      { f: 5, t: 2, l: "Chọn vụ trên bản đồ / danh sách" },
+      { self: 2, l: "Camera bay tới vụ|cách 800 m, nghiêng 45°" },
+      { f: 2, t: 3, l: "Tra phường theo toạ độ|(đa giác ranh giới)" },
+      { f: 3, t: 2, l: "Phường · trụ sở phụ trách|· cảnh sát khu vực", dash: true },
+      { f: 2, t: 1, l: "Mở video trực tiếp (WHEP)|hoặc bản ghi" },
+      { f: 1, t: 2, l: "Luồng video", dash: true },
+      { f: 5, t: 2, l: "Bấm Xác nhận tiếp nhận" },
+      { f: 2, t: 4, l: "Acknowledge (REST)" },
+      { f: 4, t: 2, l: "Kết quả xác nhận", dash: true },
+      { f: 1, t: 2, l: "sos.updated / sos.location:|cập nhật trạng thái, dời ghim", hot: true }
+    ]
+  });
+
+  render({
+    id: "dd", el: "fig-dispatch", mm: "mm-dispatch",
+    aria: "Luồng điều động: web Công an gửi cấu hình điều động, khung nhúng lấy tổ gần vụ, vẽ vòng quét, hệ thống Công an giao lệnh, tổ phản hồi, sự kiện cập nhật màu tổ trên bản đồ.",
+    lanes: [
+      { name: "Web điều hành", sub: "Công an TP (trang cha)" },
+      { name: "Khung nhúng", sub: "/embed/sos" },
+      { name: "Hệ thống SOS", sub: "Công an TP" },
+      { name: "Tổ tuần tra", sub: "app di động" }
+    ],
+    steps: [
+      { f: 0, t: 1, l: "dispatch-config|vụ, max_teams, refresh_ms" },
+      { f: 1, t: 2, l: "GET patrols/nearby?sos_id" },
+      { f: 2, t: 1, l: "Tổ trong bán kính, khoảng cách,|trạng thái lệnh, pin", dash: true },
+      { self: 1, l: "Vẽ vòng quét; tô N tổ gần nhất,|làm mờ các tổ còn lại" },
+      { f: 0, t: 2, l: "Giao lệnh cho tổ được chọn|(nghiệp vụ phía Công an)" },
+      { f: 2, t: 3, l: "Lệnh điều động" },
+      { f: 3, t: 2, l: "Nhận / tới nơi / xong|+ GPS, hướng, pin" },
+      { f: 2, t: 1, l: "patrol.assignment,|patrol.location (WebSocket)", hot: true },
+      { self: 1, l: "Đổi màu theo trạng thái,|xoay mũi tên theo hướng đi" },
+      { note: [1, 2], l: "Song song: kéo REST mỗi 15 giây để bù khi mất WebSocket" }
+    ]
+  });
+
+  render({
+    id: "au", el: "fig-auth", mm: "mm-auth",
+    aria: "Luồng xác thực: web Công an cấp token qua hash, khung nhúng gọi API bằng token, xin vé WebSocket, xin token mới trước khi hết hạn.",
+    lanes: [
+      { name: "Web điều hành", sub: "Công an TP" },
+      { name: "Khung nhúng", sub: "/embed/sos" },
+      { name: "Hệ thống SOS", sub: "API + xác thực" }
+    ],
+    steps: [
+      { f: 0, t: 1, l: "Mở iframe|/embed/sos#token=JWT" },
+      { self: 1, l: "Giữ token trong bộ nhớ" },
+      { f: 1, t: 2, l: "REST + Bearer token" },
+      { f: 1, t: 2, l: "POST ws/ticket" },
+      { f: 2, t: 1, l: "Vé dùng một lần, hạn 30 s", dash: true },
+      { f: 1, t: 2, l: "Mở WebSocket ?ticket=…", hot: true },
+      { note: [0, 2], l: "Còn 60 giây trước khi token hết hạn, hoặc nhận lỗi 401" },
+      { f: 1, t: 0, l: "sos-embed:token-expiring" },
+      { f: 0, t: 1, l: "sos-embed:token|(token mới, không tải lại trang)" },
+      { note: [0, 2], l: "Lỗi 403: dừng, báo chưa phân quyền đơn vị" }
+    ]
+  });
+
+  document.getElementById("mm-arch").textContent = [
+    "flowchart LR",
+    "  subgraph HT[Hiện trường]",
+    "    ND[Người dân<br/>App iHanoi · nút SOS]",
+    "    TTT[Tổ tuần tra<br/>App di động công an]",
+    "  end",
+    "  subgraph CA[Hệ thống SOS & điều động - Công an TP]",
+    "    REST[API quản trị REST]",
+    "    WS[Kênh sự kiện WebSocket]",
+    "    VID[Máy chủ video WHEP]",
+    "    AUTH[Xác thực JWT · vé WS 30s]",
+    "  end",
+    "  subgraph TICH[Tầng tích hợp UDT]",
+    "    NX[Next.js server<br/>proxy REST cùng nguồn]",
+    "    BE[udt-backend .NET<br/>đăng nhập · xử lý vụ · trụ sở · proxy /api/embed]",
+    "  end",
+    "  subgraph WEBCA[Web điều hành Công an TP]",
+    "    EMB[Khung nhúng /embed/sos<br/>bản đồ 3D SOS + điều động]",
+    "  end",
+    "  UDT[Web Bản sao số UDT<br/>bản đồ 3D · 21 lớp dữ liệu]",
+    "  DATA[(Dữ liệu nền<br/>126 phường/xã · 417 trụ sở · CSKV · camera VMS · Map4D)]",
+    "  ND -->|báo SOS| CA",
+    "  TTT <-->|GPS, nhận / báo lệnh| CA",
+    "  REST -->|REST| NX",
+    "  NX --> EMB",
+    "  NX --> UDT",
+    "  WS -->|sự kiện thời gian thực| EMB",
+    "  WS --> UDT",
+    "  VID -->|video trực tiếp · bản ghi| EMB",
+    "  VID --> UDT",
+    "  AUTH <-->|chuyển tiếp token| BE",
+    "  BE -->|REST| UDT",
+    "  WEBCA -->|JWT, lệnh điều động| EMB",
+    "  DATA -->|lớp nền, tra phường| UDT",
+    "  DATA --> EMB"
+  ].join("\n");
+
+  document.querySelectorAll("button.copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = document.getElementById(btn.getAttribute("data-target"));
+      var done = function (msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = "Sao chép mã"; }, 1800); };
+      var selectIt = function () {
+        var r = document.createRange(); r.selectNodeContents(pre);
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        done("Đã chọn, bấm Ctrl/⌘+C");
+      };
+      try {
+        navigator.clipboard.writeText(pre.textContent).then(function () { done("Đã sao chép"); }, selectIt);
+      } catch (e) { selectIt(); }
+    });
+  });
+})();
+</script>
+</body>
+</html>
